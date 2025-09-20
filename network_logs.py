@@ -1,9 +1,14 @@
-# import necessary libraries
+import pandas as pd
 import numpy as np
 import pandapower as pp
-import pandas as pd
+import time
 
-def create_network(lines_df, nodes_df):
+def log(msg):
+    now = time.strftime("%H:%M:%S")
+    print(f"[{now}] {msg}")
+
+def create_ieee33_network_from_dataframes(lines_df, nodes_df):
+    log("Initializing empty network ...")
     net = pp.create_empty_network(name="IEEE 33-bus")
     base_voltage_kv = 12.66
     bus_mapping = {}
@@ -12,11 +17,11 @@ def create_network(lines_df, nodes_df):
         bus_idx = pp.create_bus(net, vn_kv=base_voltage_kv, name=f"Bus_{node_num}")
         bus_mapping[node_num] = bus_idx
 
-    # Adding external grid at slack bus ...
+    log("Adding external grid at slack bus ...")
     slack_bus = bus_mapping[1]
     pp.create_ext_grid(net, slack_bus, vm_pu=1.0, va_degree=0.0)
 
-    # Creating loads ...
+    log("Creating loads ...")
     for _, row in nodes_df.iterrows():
         node_num = int(row['NODES'])
         if node_num != 1:
@@ -27,7 +32,7 @@ def create_network(lines_df, nodes_df):
                                p_mw=pd_mw, q_mvar=qd_mvar,
                                name=f"Load_{node_num}")
 
-    # Building lines between buses ...
+    log("Building lines between buses ...")
     for _, row in lines_df.iterrows():
         if row['STATUS'] == 1:
             from_bus = bus_mapping[int(row['FROM'])]
@@ -42,19 +47,19 @@ def create_network(lines_df, nodes_df):
                 c_nf_per_km=c_nf_per_km, max_i_ka=0.4,
                 name=f"Line_{row['FROM']}_{row['TO']}"
             )
+    log("Network construction complete.")
     return net, bus_mapping
 
-import numpy as np
-import pandapower as pp
-import pandas as pd
-
 def calculate_pi_qi_ui(net):
+    log("Running power flow ...")
+    start = time.time()
     try:
         pp.runpp(net, verbose=False)
-        print("Power flow converged successfully!") 
+        log("Power flow converged successfully!")
     except Exception as e:
-        print(f"Power flow did not converge. {e}")
+        log(f"Power flow did not converge. {e}")
         return None, None, None, None, None, None
+    log(f"Power flow finished in {time.time() - start:.2f} seconds.")
 
     Pi = net.res_line.p_from_mw.values
     Qi = net.res_line.q_from_mvar.values
@@ -62,65 +67,65 @@ def calculate_pi_qi_ui(net):
     Ui = net.res_bus.vm_pu.values[to_buses]
     Ri = net.line.r_ohm_per_km.values * net.line.length_km.values
     si = np.ones(len(Pi))
+    minf1_terms = (Pi ** 2 + Qi ** 2) / (Ui ** 2) * si * Ri
+    minf1_total = np.sum(minf1_terms)
 
+    log("Computation results:")
+    print(f"Minimum loss objective function (minf1): {minf1_total:.6f}")
     print(f"Total system losses: {np.sum(net.res_line.pl_mw):.6f} MW")
     print(f"Minimum bus voltage: {np.min(net.res_bus.vm_pu):.6f} p.u.")
     print(f"Number of lines analyzed: {len(Pi)}")
 
-    net_res_df = pd.DataFrame({
+    log("Printing detailed per-line results ...")
+    df = pd.DataFrame({
         'Line_From': net.line.from_bus.values + 1,
         'Line_To': net.line.to_bus.values + 1,
         'Pi_MW': Pi,
         'Qi_MVAr': Qi,
         'Ui_pu': Ui,
-        'Ri_ohm': Ri
+        'Ri_ohm': Ri,
+        'Minf1_Term': minf1_terms
     })
-    print(net_res_df.round(6).to_string(index=False))
-    return Pi, Qi, Ui, Ri, si, net_res_df
+    print(df.round(6).to_string(index=False))
+    return Pi, Qi, Ui, Ri, si, minf1_total
 
-def calculate_minf1(Pi, Qi, Ui, Ri, si):
-  minf1_terms = (Pi ** 2 + Qi ** 2) / (Ui ** 2) * si * Ri
-  minf1_total = np.sum(minf1_terms)
-  print(f"Minimum loss objective function (minf1): {minf1_total:.6f}")
-  return minf1_total
-
-def calculate_Ii_INi(net, line_capacity_ka=None):
+def calculate_minf2(net, line_capacity_ka=None):
     """
-    Consider INi = 1
+    Calculate load balancing function minf2:
+    minf2 = max(actual line current) - min(actual line current)
+    or if branch ratings are known:
+    minf2 = max(Ii/INi) - min(Ii/INi)
+    If not provided, assumes all line capacities are equal.
     """
+    log("Calculating branch currents for minf2 ...")
     Ii = net.res_line.i_from_ka    # Branch current magnitude (from bus side) in kA
 
     if line_capacity_ka is None:    # If not provided, set all to 1 (per-unit)
-        INi = np.ones_like(Ii)
-    else:
-        INi = line_capacity_ka
+        line_capacity_ka = np.ones_like(Ii)
 
-    print("Full branch currents (kA):", Ii)
-    print("Line capacity", INi)
+    Ii_pu = Ii / line_capacity_ka
 
-    return Ii, INi
-
-def calculate_minf2(Ii, INi):
-    """
-    minf2 = max(Ii/INi) - min(Ii/INi)
-    """
-
-    Ii_pu = Ii / INi
+    minf2_raw = np.max(Ii) - np.min(Ii)
     minf2_pu = np.max(Ii_pu) - np.min(Ii_pu)
 
-    print(f"minf2 (per-unit current difference): {minf2_pu:.6f}")
+    log(f"minf2 (raw current difference): {minf2_raw:.6f} kA")
+    log(f"minf2 (per-unit current difference): {minf2_pu:.6f}")
+    print("Full branch currents (kA):", Ii)
+    print("Full branch currents (per unit):", Ii_pu)
 
-    return minf2_pu
+    return Ii, minf2_raw, minf2_pu
 
+# Main execution
 if __name__ == "__main__":
+    log("Loading data ...")
     lines_df = pd.read_csv('Lines_33.csv')
     nodes_df = pd.read_csv('Nodes_33.csv')
-    net, bus_mapping = create_network(lines_df, nodes_df)
-    Pi, Qi, Ui, Ri, si, net_res_df = calculate_pi_qi_ui(net)
-    minf1 = calculate_minf1(Pi, Qi, Ui, Ri, si)
-    Ii, INi = calculate_Ii_INi(net, line_capacity_ka=None)
-    minf2 = calculate_minf2(Ii, INi)
-    print("==================================================================================================")
-    print("minf1:", minf1)
-    print("minf2:", minf2)
-    print("==================================================================================================")
+
+    log(f"Lines DataFrame columns: {lines_df.columns.tolist()}")
+    log(f"Nodes DataFrame columns: {nodes_df.columns.tolist()}")
+    log(f"Lines DataFrame shape: {lines_df.shape}")
+    log(f"Nodes DataFrame shape: {nodes_df.shape}")
+
+    net, bus_mapping = create_ieee33_network_from_dataframes(lines_df, nodes_df)
+    Pi, Qi, Ui, Ri, si, minf1_total = calculate_pi_qi_ui(net)
+    Ii, minf2_raw, minf2_pu = calculate_minf2(net)
