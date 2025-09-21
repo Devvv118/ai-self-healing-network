@@ -51,9 +51,9 @@ import pandas as pd
 def calculate_pi_qi_ui(net):
     try:
         pp.runpp(net, verbose=False)
-        print("Power flow converged successfully!") 
+        # print("Power flow converged successfully!") 
     except Exception as e:
-        print(f"Power flow did not converge. {e}")
+        # print(f"Power flow did not converge. {e}")
         return None, None, None, None, None, None
 
     Pi = net.res_line.p_from_mw.values
@@ -63,9 +63,9 @@ def calculate_pi_qi_ui(net):
     Ri = net.line.r_ohm_per_km.values * net.line.length_km.values
     si = np.ones(len(Pi))
 
-    print(f"Total system losses: {np.sum(net.res_line.pl_mw):.6f} MW")
-    print(f"Minimum bus voltage: {np.min(net.res_bus.vm_pu):.6f} p.u.")
-    print(f"Number of lines analyzed: {len(Pi)}")
+    # print(f"Total system losses: {np.sum(net.res_line.pl_mw):.6f} MW")
+    # print(f"Minimum bus voltage: {np.min(net.res_bus.vm_pu):.6f} p.u.")
+    # print(f"Number of lines analyzed: {len(Pi)}")
 
     net_res_df = pd.DataFrame({
         'Line_From': net.line.from_bus.values + 1,
@@ -75,13 +75,13 @@ def calculate_pi_qi_ui(net):
         'Ui_pu': Ui,
         'Ri_ohm': Ri
     })
-    print(net_res_df.round(6).to_string(index=False))
+    # print(net_res_df.round(6).to_string(index=False))
     return Pi, Qi, Ui, Ri, si, net_res_df
 
 def calculate_minf1(Pi, Qi, Ui, Ri, si):
   minf1_terms = (Pi ** 2 + Qi ** 2) / (Ui ** 2) * si * Ri
   minf1_total = np.sum(minf1_terms)
-  print(f"Minimum loss objective function (minf1): {minf1_total:.6f}")
+#   print(f"Minimum loss objective function (minf1): {minf1_total:.6f}")
   return minf1_total
 
 def calculate_Ii_INi(net, line_capacity_ka=None):
@@ -95,8 +95,8 @@ def calculate_Ii_INi(net, line_capacity_ka=None):
     else:
         INi = line_capacity_ka
 
-    print("Full branch currents (kA):", Ii)
-    print("Line capacity", INi)
+    # print("Full branch currents (kA):", Ii)
+    # print("Line capacity", INi)
 
     return Ii, INi
 
@@ -108,7 +108,7 @@ def calculate_minf2(Ii, INi):
     Ii_pu = Ii / INi
     minf2_pu = np.max(Ii_pu) - np.min(Ii_pu)
 
-    print(f"minf2 (per-unit current difference): {minf2_pu:.6f}")
+    # print(f"minf2 (per-unit current difference): {minf2_pu:.6f}")
 
     return minf2_pu
 
