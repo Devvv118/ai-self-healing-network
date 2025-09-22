@@ -1,7 +1,7 @@
 # import necessary libraries
 import numpy as np
-import pandapower as pp
 import pandas as pd
+import pandapower as pp
 
 def create_network(lines_df, nodes_df):
     net = pp.create_empty_network(name="IEEE 33-bus")
