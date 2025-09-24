@@ -1,20 +1,24 @@
 import numpy as np
 import pandas as pd
 import pandapower as pp
-# from copy import deepcopy
 
 from network import create_network, calculate_pi_qi_ui, calculate_Ii_INi
 
-def perturb_loads(nodes_df, pd_factor=(0.5, 1.5), qd_factor=(0.5, 1.5)):
+def perturb_loads(nodes_df, lines_df ,pd_factor=(0.5, 1.5), qd_factor=(0.5, 1.5), r_factor=(0.7, 1.3), x_factor=(0.7, 1.3)):
     if np.random.rand() < 0.1:  # 10% of cases
         pd_factor = (0.2, 2.0)
         qd_factor = (0.2, 2.0)
-    df = nodes_df.copy()
-    if 'PD' in df.columns:
-        df['PD'] = df['PD'] * np.random.uniform(*pd_factor, size=len(df))
-    if 'QD' in df.columns:
-        df['QD'] = df['QD'] * np.random.uniform(*qd_factor, size=len(df))
-    return df
+    n_df = nodes_df.copy()
+    l_df = lines_df.copy()
+    if 'PD' in n_df.columns:
+        n_df['PD'] = n_df['PD'] * np.random.uniform(*pd_factor, size=len(n_df))
+    if 'QD' in n_df.columns:
+        n_df['QD'] = n_df['QD'] * np.random.uniform(*qd_factor, size=len(n_df))
+    if 'R' in l_df.columns:
+        l_df['R'] = l_df['R'] * np.random.uniform(*r_factor, size=len(l_df))
+    if 'X' in l_df.columns:
+        l_df['X'] = l_df['X'] * np.random.uniform(*x_factor, size=len(l_df))
+    return n_df, l_df
 
 def generate_corrupted_sample(perfect_result, noise_level=0.05, drop_prob=0.05):
     noisy = perfect_result.copy()
@@ -32,9 +36,9 @@ def generate_corrupted_sample(perfect_result, noise_level=0.05, drop_prob=0.05):
 def simulate_and_export(lines_df, nodes_df, iterations=500, corrupted_copies=2):
     results = []
     for i in range(iterations):
-        perturbed_nodes = perturb_loads(nodes_df)
-        net, _ = create_network(lines_df, perturbed_nodes)
-        Pi, Qi, Ui, Ri, si, net_res_df = calculate_pi_qi_ui(net)
+        perturbed_nodes, perturbed_lines = perturb_loads(nodes_df, lines_df)
+        net, _ = create_network(perturbed_lines, perturbed_nodes)
+        Pi, Qi, Ui, Ri, Xi, si, net_res_df = calculate_pi_qi_ui(net)
         Ii, INi = calculate_Ii_INi(net)
         perfect_result = pd.DataFrame({'Pi': Pi, 'Qi': Qi, 'Ui': Ui, 'Ii': Ii})
         for j in range(corrupted_copies):
@@ -52,4 +56,4 @@ def simulate_and_export(lines_df, nodes_df, iterations=500, corrupted_copies=2):
 if __name__ == "__main__":
     lines_df = pd.read_csv('Lines_33.csv')
     nodes_df = pd.read_csv('Nodes_33.csv')
-    simulate_and_export(lines_df, nodes_df, iterations=250, corrupted_copies=2)
+    simulate_and_export(lines_df, nodes_df, iterations=2500, corrupted_copies=2)

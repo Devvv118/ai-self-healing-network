@@ -9,7 +9,7 @@ def create_network(lines_df, nodes_df):
     bus_mapping = {}
     for _, row in nodes_df.iterrows():
         node_num = int(row['NODES'])
-        bus_idx = pp.create_bus(net, vn_kv=base_voltage_kv, name=f"Bus_{node_num}")
+        bus_idx = pp.create_bus(net, vn_kv=base_acvoltage_kv, name=f"Bus_{node_num}")
         bus_mapping[node_num] = bus_idx
 
     # Adding external grid at slack bus ...
@@ -44,10 +44,6 @@ def create_network(lines_df, nodes_df):
             )
     return net, bus_mapping
 
-import numpy as np
-import pandapower as pp
-import pandas as pd
-
 def calculate_pi_qi_ui(net):
     try:
         pp.runpp(net, verbose=False)
@@ -61,6 +57,7 @@ def calculate_pi_qi_ui(net):
     to_buses = net.line.to_bus.values
     Ui = net.res_bus.vm_pu.values[to_buses]
     Ri = net.line.r_ohm_per_km.values * net.line.length_km.values
+    Xi = net.line.x_ohm_per_km.values * net.line.length_km.values
     si = np.ones(len(Pi))
 
     # print(f"Total system losses: {np.sum(net.res_line.pl_mw):.6f} MW")
@@ -73,10 +70,11 @@ def calculate_pi_qi_ui(net):
         'Pi_MW': Pi,
         'Qi_MVAr': Qi,
         'Ui_pu': Ui,
-        'Ri_ohm': Ri
+        'Ri_ohm': Ri,
+        'Xi_ohm': Xi
     })
     # print(net_res_df.round(6).to_string(index=False))
-    return Pi, Qi, Ui, Ri, si, net_res_df
+    return Pi, Qi, Ui, Ri, Xi, si, net_res_df
 
 def calculate_minf1(Pi, Qi, Ui, Ri, si):
   minf1_terms = (Pi ** 2 + Qi ** 2) / (Ui ** 2) * si * Ri
@@ -116,7 +114,7 @@ if __name__ == "__main__":
     lines_df = pd.read_csv('Lines_33.csv')
     nodes_df = pd.read_csv('Nodes_33.csv')
     net, bus_mapping = create_network(lines_df, nodes_df)
-    Pi, Qi, Ui, Ri, si, net_res_df = calculate_pi_qi_ui(net)
+    Pi, Qi, Ui, Ri, Xi, si, net_res_df = calculate_pi_qi_ui(net)
     minf1 = calculate_minf1(Pi, Qi, Ui, Ri, si)
     Ii, INi = calculate_Ii_INi(net, line_capacity_ka=None)
     minf2 = calculate_minf2(Ii, INi)
