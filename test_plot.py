@@ -1,8 +1,6 @@
 import pandapower as pp
 import pandapower.plotting as plot
 
-# from network import create_network
-
 net = pp.create_empty_network()
 b1 = pp.create_bus(net, vn_kv=12.66)
 b2 = pp.create_bus(net, vn_kv=12.66)

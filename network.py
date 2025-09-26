@@ -9,7 +9,7 @@ def create_network(lines_df, nodes_df):
     bus_mapping = {}
     for _, row in nodes_df.iterrows():
         node_num = int(row['NODES'])
-        bus_idx = pp.create_bus(net, vn_kv=base_acvoltage_kv, name=f"Bus_{node_num}")
+        bus_idx = pp.create_bus(net, vn_kv=base_voltage_kv, name=f"Bus_{node_num}")
         bus_mapping[node_num] = bus_idx
 
     # Adding external grid at slack bus ...
@@ -42,6 +42,7 @@ def create_network(lines_df, nodes_df):
                 c_nf_per_km=c_nf_per_km, max_i_ka=0.4,
                 name=f"Line_{row['FROM']}_{row['TO']}"
             )
+
     return net, bus_mapping
 
 def calculate_pi_qi_ui(net):
