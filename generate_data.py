@@ -41,10 +41,11 @@ def simulate_and_export(lines_df, nodes_df, iterations=500, corrupted_copies=2):
         Pi, Qi, Ui, Ri, Xi, si, net_res_df = calculate_pi_qi_ui(net)
         Ii, INi = calculate_Ii_INi(net)
         perfect_result = pd.DataFrame({'Pi': Pi, 'Qi': Qi, 'Ui': Ui, 'Ii': Ii})
+        extras = pd.DataFrame({'Ri': Ri, 'Xi': Xi, 'si': si})
         for j in range(corrupted_copies):
             corrupted = generate_corrupted_sample(perfect_result)
             merged = pd.concat(
-                [corrupted.add_suffix("_noisy"), perfect_result.add_suffix("_clean")],
+                [corrupted.add_suffix("_noisy"), perfect_result.add_suffix("_clean"), extras],
                 axis=1
             )
             results.append(merged)
