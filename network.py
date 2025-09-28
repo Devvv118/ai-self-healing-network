@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import pandapower as pp
 
+from functions import calculate_minf1, calculate_minf2
+
 def create_network(lines_df, nodes_df):
     net = pp.create_empty_network(name="IEEE 33-bus")
     base_voltage_kv = 12.66
@@ -48,9 +50,7 @@ def create_network(lines_df, nodes_df):
 def calculate_pi_qi_ui(net):
     try:
         pp.runpp(net, verbose=False)
-        # print("Power flow converged successfully!") 
     except Exception as e:
-        # print(f"Power flow did not converge. {e}")
         return None, None, None, None, None, None
 
     Pi = net.res_line.p_from_mw.values
@@ -61,10 +61,6 @@ def calculate_pi_qi_ui(net):
     Xi = net.line.x_ohm_per_km.values * net.line.length_km.values
     si = np.ones(len(Pi))
 
-    # print(f"Total system losses: {np.sum(net.res_line.pl_mw):.6f} MW")
-    # print(f"Minimum bus voltage: {np.min(net.res_bus.vm_pu):.6f} p.u.")
-    # print(f"Number of lines analyzed: {len(Pi)}")
-
     net_res_df = pd.DataFrame({
         'Line_From': net.line.from_bus.values + 1,
         'Line_To': net.line.to_bus.values + 1,
@@ -74,14 +70,7 @@ def calculate_pi_qi_ui(net):
         'Ri_ohm': Ri,
         'Xi_ohm': Xi
     })
-    # print(net_res_df.round(6).to_string(index=False))
     return Pi, Qi, Ui, Ri, Xi, si, net_res_df
-
-def calculate_minf1(Pi, Qi, Ui, Ri, si):
-  minf1_terms = (Pi ** 2 + Qi ** 2) / (Ui ** 2) * si * Ri
-  minf1_total = np.sum(minf1_terms)
-#   print(f"Minimum loss objective function (minf1): {minf1_total:.6f}")
-  return minf1_total
 
 def calculate_Ii_INi(net, line_capacity_ka=None):
     """
@@ -94,22 +83,8 @@ def calculate_Ii_INi(net, line_capacity_ka=None):
     else:
         INi = line_capacity_ka
 
-    # print("Full branch currents (kA):", Ii)
-    # print("Line capacity", INi)
-
     return Ii, INi
 
-def calculate_minf2(Ii, INi):
-    """
-    minf2 = max(Ii/INi) - min(Ii/INi)
-    """
-
-    Ii_pu = Ii / INi
-    minf2_pu = np.max(Ii_pu) - np.min(Ii_pu)
-
-    # print(f"minf2 (per-unit current difference): {minf2_pu:.6f}")
-
-    return minf2_pu
 
 if __name__ == "__main__":
     lines_df = pd.read_csv('Lines_33.csv')
@@ -119,7 +94,7 @@ if __name__ == "__main__":
     minf1 = calculate_minf1(Pi, Qi, Ui, Ri, si)
     Ii, INi = calculate_Ii_INi(net, line_capacity_ka=None)
     minf2 = calculate_minf2(Ii, INi)
-    print("==================================================================================================")
+    print("-" * 30)
     print("minf1:", minf1)
     print("minf2:", minf2)
-    print("==================================================================================================")
+    print("-" * 30)
